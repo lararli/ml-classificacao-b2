@@ -80,10 +80,10 @@ def analyze():
     print(f"\n  {'─'*65}")
 
     if degraded:
-        print(f"  STATUS: ⚠ DEGRADED — f1 dropped more than 0.02. Investigate drift.")
+        print(f"  STATUS: ⚠ DEGRADED - f1 dropped more than 0.02. Investigate drift.")
         print(f"  ACTION: run 'make test' to re-evaluate all models.")
     else:
-        print(f"  STATUS: STABLE — model performing within expected range.")
+        print(f"  STATUS: STABLE - model performing within expected range.")
         print(f"  ACTION: no action needed. Continue monitoring.")
 
 

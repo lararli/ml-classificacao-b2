@@ -1,4 +1,4 @@
-# ML Pipeline — Loan Approval Classification
+# ML Pipeline - Loan Approval Classification
 
 Projeto de operacionalizacao de modelos de ML para classificacao de aprovacao de emprestimos.
 
@@ -24,8 +24,7 @@ inferencia e monitoramento de drift.
 │   ├── train.py                Treinamento com MLflow tracking
 │   ├── evaluate.py             Comparacao de modelos + analise financeira
 │   ├── serve.py                Servico de inferencia
-│   ├── monitoring.py           Deteccao de drift
-│   └── reduction.py            PCA/LDA pipeline helpers
+│   └── monitoring.py           Deteccao de drift
 │
 ├── models/                     Modelos customizados (DS edita aqui)
 │   └── custom_models.py        RuleBasedClassifier (exemplo)
@@ -33,14 +32,8 @@ inferencia e monitoramento de drift.
 ├── scripts/                    Ferramentas de apoio
 │   ├── compare.py              Tabela comparativa no terminal + CSV
 │   ├── promote.py              Promove modelo para producao
-│   ├── simulate_months.py      Simula execucoes mensais
 │   └── post_deploy.py          Compara run atual vs anterior
 │
-├── docs/                       Documentacao
-│   ├── WALKTHROUGH.md          Referencia para apresentacao
-│   ├── MANUAL_TESTES.md        Guia para data scientists
-│   ├── CONCEITOS_AULA.md       Conceitos aplicados no projeto
-│   └── DECISOES_ESTRUTURA.md   Justificativa da organizacao
 │
 ├── archive/                    Projeto anterior preservado
 ├── run_pipeline.py             Orquestrador principal
@@ -91,7 +84,7 @@ make post-deploy                    # compara com run anterior
 | Modo | YAML | Modelos | Reducao |
 |------|------|:---:|:---:|
 | `make test` (experimentacao) | experiments_test.yaml | 10 | PCA + LDA |
-| `make prod` (producao) | experiments_prod.yaml | 1 | — |
+| `make prod` (producao) | experiments_prod.yaml | 1 | - |
 
 ## Resultados
 
@@ -101,7 +94,7 @@ make post-deploy                    # compara com run anterior
 | SklearnDT_Optimized | 0.8055 | 0.9199 | 0.9586 |
 | SklearnRandomForest | 0.8053 | 0.9223 | 0.9708 |
 | SklearnRF_PCA | 0.7891 | 0.9124 | 0.9624 |
-| SklearnPerceptron | 0.6641 | 0.8737 | — |
+| SklearnPerceptron | 0.6641 | 0.8737 | - |
 | CustomRuleBased | 0.0000 | 0.7778 | 0.5000 |
 
 ## Tecnologias
