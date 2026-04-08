@@ -20,14 +20,14 @@ Classificacao binaria: prever se uma solicitacao deve ser aprovada (1) ou rejeit
 
 ### Metricas de sucesso
 
-- **Tecnica:** F1-Score - equilibra nao aprovar caloteiros (precision) e nao perder bons clientes (recall).
+- **Tecnica:** F1-Score, que equilibra nao aprovar caloteiros (precision) e nao perder bons clientes (recall).
 - **Negocio:** impacto financeiro total (custo dos erros em reais).
 
 ### Evolucao do projeto
 
 No projeto anterior, exploramos diferentes modelos num notebook unico. Testamos Perceptron, Decision Trees e Random Forest, e identificamos que o Random Forest otimizado produzia o melhor resultado (F1=0.83).
 
-Neste projeto, o desafio mudou: nao se trata mais de encontrar o melhor modelo, mas de estruturar o trabalho como um projeto de engenharia. Reorganizamos o notebook em scripts modulares, adicionamos configuracoes externas, tracking de experimentos, validacao de qualidade, e monitoramento - transformando uma exploracao pontual num sistema reprodutivel e operacional.
+Neste projeto, o desafio mudou: nao se trata mais de encontrar o melhor modelo, mas de estruturar o trabalho como um projeto de engenharia. Reorganizamos o notebook em scripts modulares, adicionamos configuracoes externas, tracking de experimentos, validacao de qualidade, e monitoramento, transformando uma exploracao pontual num sistema reprodutivel e operacional.
 
 ---
 
@@ -71,7 +71,7 @@ As configuracoes do projeto sao externas ao codigo, definidas em arquivos YAML:
 
 Cada YAML e validado por uma dataclass Python. Campos obrigatorios geram erro se faltarem. Campos opcionais tem valor padrao. Isso garante que erros de configuracao aparecem na carga, nao no meio do treinamento.
 
-O professor demonstrou YAML com dicionarios Python. Adicionamos dataclasses como camada de validacao porque e a pratica usada profissionalmente - o YAML continua sendo a interface de configuracao (editavel sem mexer no codigo), e a dataclass garante que a estrutura esta correta.
+O professor demonstrou YAML com dicionarios Python. Adicionamos dataclasses como camada de validacao porque e a pratica usada profissionalmente. O YAML continua sendo a interface de configuracao (editavel sem mexer no codigo), e a dataclass garante que a estrutura esta correta.
 
 ### Separacao de ambientes
 
@@ -115,7 +115,7 @@ Em producao real, esses comandos seriam etapas de um pipeline de CI/CD automatiz
 
 ### Flexibilidade de inputs
 
-Nem sempre e possivel garantir que todas as fontes de dados tenham o mesmo formato. Em cenarios reais, diferentes fontes podem trazer informacoes diferentes - por exemplo, um estado envia dados de licencas com 10 colunas e outro envia com 15. O importante e encontrar um ponto em comum no output: todos os modelos recebem as mesmas features padronizadas e produzem o mesmo tipo de resultado.
+Nem sempre e possivel garantir que todas as fontes de dados tenham o mesmo formato. Em cenarios reais, diferentes fontes podem trazer informacoes diferentes. Por exemplo, um estado envia dados de licencas com 10 colunas e outro envia com 15. O importante e encontrar um ponto em comum no output: todos os modelos recebem as mesmas features padronizadas e produzem o mesmo tipo de resultado.
 
 A arquitetura que construimos permite isso. O contrato de dados (`data.yaml`) define o formato padrao. Se amanha uma nova fonte de dados precisar ser integrada, basta criar um preprocessamento especifico para essa fonte que converte os dados para o formato do contrato. O modelo nao muda - ele sempre recebe features padronizadas. A complexidade fica na ingestao, nao no treinamento.
 
@@ -133,9 +133,9 @@ Loan Approval Classification (Kaggle): 45.000 solicitacoes de emprestimo com 14 
 
 ### Ingestao
 
-O dataset e baixado e convertido de CSV para Parquet (compressao Snappy). Parquet armazena dados por coluna - permite ler apenas as colunas necessarias e ocupa menos espaco.
+O dataset e baixado e convertido de CSV para Parquet (compressao Snappy). Parquet armazena dados por coluna, o que permite ler apenas as colunas necessarias e ocupa menos espaco.
 
-Neste projeto usamos Parquet como camada de armazenamento local. Em ambiente de producao real, a escolha dependeria da infraestrutura da empresa - podendo ser um data warehouse, data lake, ou banco relacional, conforme volume e frequencia de acesso.
+Neste projeto usamos Parquet como camada de armazenamento local. Em ambiente de producao real, a escolha dependeria da infraestrutura da empresa, podendo ser um data warehouse, data lake, ou banco relacional, conforme volume e frequencia de acesso.
 
 ### Contrato de dados
 
@@ -149,7 +149,7 @@ O `data.yaml` define quais colunas o pipeline espera. Na ingestao, o sistema ver
 - Numericas: ranges (idade 18-100, score 300-850), sem nulos
 - Categoricas: valores permitidos (loan_status so 0/1, historico de calote so Yes/No)
 
-Resultado: 33 regras passaram, 1 falhou - 7 registros com idade acima de 100 anos (outliers reais do dataset). Decidimos manter porque o modelo consegue lidar e sao dados reais.
+Resultado: 33 regras passaram, 1 falhou. 7 registros com idade acima de 100 anos (outliers reais do dataset). Decidimos manter porque o modelo consegue lidar e sao dados reais.
 
 ### Limitacoes do dataset
 
@@ -160,8 +160,8 @@ Resultado: 33 regras passaram, 1 falhou - 7 registros com idade acima de 100 ano
 ### Pipeline de preprocessamento
 
 Aplicamos transformacoes diferentes por tipo de coluna:
-- **Numericas:** RobustScaler - normaliza usando mediana, resistente a valores extremos (renda tem outliers significativos)
-- **Categoricas:** OneHotEncoder - transforma categorias em colunas 0/1
+- **Numericas:** RobustScaler, que normaliza usando mediana, resistente a valores extremos (renda tem outliers significativos)
+- **Categoricas:** OneHotEncoder, que transforma categorias em colunas 0/1
 
 Resultado: 13 colunas originais viram 22 apos a transformacao.
 
@@ -175,7 +175,7 @@ O preprocessador aprende as estatisticas apenas dos dados de treino e aplica a m
 
 O pipeline suporta dois caminhos para incluir modelos:
 
-**Modelos do scikit-learn (declarativos):** definidos no YAML com classe e parametros. O pipeline instancia automaticamente. O time de dados nao escreve codigo - so configura.
+**Modelos do scikit-learn (declarativos):** definidos no YAML com classe e parametros. O pipeline instancia automaticamente. O time de dados nao escreve codigo. So configura.
 
 **Modelos customizados (codigo):** escritos em `src/custom_models.py`. Implementam a mesma interface (`fit` e `predict`). Referenciados no YAML da mesma forma. Isso permite logica especifica de negocio que nao existe em bibliotecas prontas.
 
@@ -190,7 +190,7 @@ Implementamos um classificador deterministico como baseline. Ele aplica regras f
 - Se o score de credito esta abaixo de 600 → rejeitar
 - Caso contrario → aprovar
 
-Este modelo nao usa estatistica - demonstra que regras fixas sao insuficientes para o problema (F1=0.00, nao aprovou ninguem corretamente). Isso justifica a necessidade de modelos de machine learning.
+Este modelo nao usa estatistica. Demonstra que regras fixas sao insuficientes para o problema (F1=0.00, nao aprovou ninguem corretamente). Isso justifica a necessidade de modelos de machine learning.
 
 ### Resultados
 
@@ -209,7 +209,7 @@ Este modelo nao usa estatistica - demonstra que regras fixas sao insuficientes p
 
 A progressao dos resultados demonstra que:
 
-1. **Regras deterministicas nao funcionam** (F1=0.00): tanto o baseline automatico quanto as regras de negocio falharam em identificar bons clientes. Os dois tem 78% de acuracia (simplesmente rejeitam todo mundo), mas F1=0 - nao aprovaram ninguem.
+1. **Regras deterministicas nao funcionam** (F1=0.00): tanto o baseline automatico quanto as regras de negocio falharam em identificar bons clientes. Os dois tem 78% de acuracia (simplesmente rejeitam todo mundo), mas F1=0, nao aprovaram ninguem.
 
 2. **Modelo linear e insuficiente** (F1=0.66): o Perceptron tenta separar as classes com uma linha reta. Funciona parcialmente, mas o problema nao e linear.
 
@@ -251,7 +251,7 @@ Ambas foram integradas como etapas do Pipeline do scikit-learn, garantindo que a
 
 PCA reduziu de 22 para 17 features mas perdeu 3.6 pontos de F1. O ganho em tempo (38s para 3s) nao compensa a perda de performance neste caso.
 
-LDA comprimiu 22 features em 1 unico numero. Perdeu 16 pontos de F1 - informacao demais descartada.
+LDA comprimiu 22 features em 1 unico numero. Perdeu 16 pontos de F1. Informacao demais descartada.
 
 Com apenas 22 features, a dimensionalidade ja e gerenciavel. Reducao nao se justifica. Por isso, em producao, rodamos o modelo sem reducao. A reducao existe apenas na experimentacao como evidencia de que essa decisao foi tomada com base em dados, nao por omissao.
 
@@ -342,7 +342,7 @@ Definimos metricas em dois niveis:
 
 O sistema monitora mudancas nos dados comparando estatisticas (media) de cada coluna entre dados de treino e dados novos. Se a variacao superar 10%, gera alerta. Tambem verifica se apareceram categorias novas que o modelo nunca viu.
 
-Na simulacao realizada, nenhum drift foi detectado - resultado esperado por usar o mesmo dataset dividido aleatoriamente.
+Na simulacao realizada, nenhum drift foi detectado, resultado esperado por usar o mesmo dataset dividido aleatoriamente.
 
 ### Analise pos-deploy
 
@@ -399,4 +399,4 @@ O retreino e completo (nao incremental) porque queremos garantir que o modelo ap
 
 ### Aprendizado
 
-A principal mudanca neste projeto nao e tecnica - e de mentalidade. O foco deixa de ser maximizar uma metrica isolada e passa a ser garantir que o sistema e reprodutivel, rastreavel, e preparado para mudancas. O modelo e apenas uma peca de um sistema que precisa ser mantido, monitorado e atualizado continuamente.
+A principal mudanca neste projeto nao e tecnica, e de mentalidade. O foco deixa de ser maximizar uma metrica isolada e passa a ser garantir que o sistema e reprodutivel, rastreavel, e preparado para mudancas. O modelo e apenas uma peca de um sistema que precisa ser mantido, monitorado e atualizado continuamente.
