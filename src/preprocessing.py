@@ -35,5 +35,5 @@ def load_and_split(data: DataConfig, pipeline: PipelineConfig, run_id: str = "")
         random_state=pipeline.random_state,
         stratify=y if pipeline.stratify else None,
     )
-    print(f"[preprocessing] train: {len(X_train)} | test: {len(X_test)}")
+    print(f"PREPROCESSING: train={len(X_train)} | test={len(X_test)}")
     return X_train, X_test, y_train, y_test

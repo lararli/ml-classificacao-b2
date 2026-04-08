@@ -17,7 +17,7 @@ def download_dataset(data: DataConfig, pipeline: PipelineConfig) -> Path:
     raw_dir = Path(pipeline.paths.raw_data_dir)
     raw_dir.mkdir(parents=True, exist_ok=True)
 
-    print(f"[ingestion] downloading: {data.source}")
+    print(f"INGESTION: downloading {data.source}")
     path = kagglehub.dataset_download(data.source)
     downloaded = list(Path(path).glob(data.file_pattern))
     if not downloaded:
@@ -25,7 +25,7 @@ def download_dataset(data: DataConfig, pipeline: PipelineConfig) -> Path:
 
     dest = raw_dir / downloaded[0].name
     shutil.copy2(downloaded[0], dest)
-    print(f"[ingestion] csv: {dest}")
+    print(f"INGESTION: csv saved at {dest}")
     return dest
 
 
@@ -37,7 +37,7 @@ def convert_to_parquet(csv_path: Path, pipeline: PipelineConfig, run_id: str = "
     parquet_path = processed_dir / csv_path.with_suffix(".parquet").name
     df = pd.read_csv(csv_path)
     pq.write_table(pa.Table.from_pandas(df), parquet_path, compression="snappy")
-    print(f"[ingestion] parquet: {parquet_path} ({len(df)} rows)")
+    print(f"INGESTION: parquet saved at {parquet_path} ({len(df)} rows)")
     return parquet_path
 
 
@@ -49,7 +49,7 @@ def load_data(pipeline: PipelineConfig, run_id: str = "") -> pd.DataFrame:
         raise FileNotFoundError(f"no parquet in {processed_dir}")
 
     df = pd.read_parquet(parquet_files[0])
-    print(f"[ingestion] loaded: {parquet_files[0].name} ({len(df)} rows, {len(df.columns)} cols)")
+    print(f"INGESTION: loaded {parquet_files[0].name} ({len(df)} rows, {len(df.columns)} cols)")
     return df
 
 
@@ -58,4 +58,4 @@ def validate_schema(df: pd.DataFrame, data: DataConfig) -> None:
     missing = set(data.all_columns) - set(df.columns)
     if missing:
         raise ValueError(f"missing columns: {missing}")
-    print(f"[ingestion] schema ok ({len(data.all_columns)} columns)")
+    print(f"INGESTION: schema validated ({len(data.all_columns)} columns)")

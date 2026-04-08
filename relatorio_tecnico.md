@@ -271,18 +271,52 @@ Com apenas 22 features, a dimensionalidade ja e gerenciavel. Reducao nao se just
 
 ### Analise financeira
 
-Calculamos o custo de cada erro usando valores reais do dataset:
-- Aprovar caloteiro (FP): valor total do emprestimo perdido
-- Rejeitar bom cliente (FN): juros que o banco deixou de ganhar
+Cada erro do modelo tem um custo diferente, calculado com valores reais do dataset:
 
-### Justificativa
+| Tipo de Erro | O que acontece | Como calculamos | Formula |
+|---|---|---|---|
+| Falso Positivo (FP) | Aprovou cliente que deu calote | Banco perde o valor total do emprestimo | soma(loan_amnt) dos FPs |
+| Falso Negativo (FN) | Rejeitou cliente que pagaria | Banco perde os juros que teria ganho | soma(loan_amnt x loan_int_rate / 100) dos FNs |
 
-SklearnRFOptimized selecionado por:
+O prejuizo de FP e tipicamente maior que de FN porque:
+- FP: perde 100% do valor emprestado (o dinheiro nao volta)
+- FN: perde apenas os juros (~10-15% do valor)
+
+Isso justifica a postura conservadora do modelo: e financeiramente mais seguro rejeitar um bom cliente (perder juros) do que aprovar um caloteiro (perder capital).
+
+### Resultados financeiros detalhados
+
+| Modelo | FP (qtd) | FN (qtd) | Prejuizo FP | Receita Perdida FN | Impacto Total |
+|--------|:---:|:---:|---:|---:|---:|
+| SklearnRandomForest | 145 | 554 | R$1.46M | R$0.54M | R$2.0M |
+| SklearnRFOptimized | 176 | 471 | R$1.63M | R$0.47M | R$2.1M |
+| SklearnDTOptimized | 214 | 507 | R$1.94M | R$0.52M | R$2.5M |
+| SklearnDummy | 0 | 2000 | R$0 | R$2.84M | R$2.8M |
+| CustomRuleBased | 0 | 2000 | R$0 | R$2.84M | R$2.8M |
+| SklearnPerceptron | 261 | 876 | R$3.60M | R$0.83M | R$4.4M |
+| SklearnRFLDA | 646 | 684 | R$6.34M | R$0.74M | R$7.1M |
+
+### Trade-off entre RF Optimized e Random Forest
+
+| Aspecto | RF Optimized | Random Forest |
+|---------|:---:|:---:|
+| F1 | 0.8254 (melhor) | 0.8053 |
+| Recall | 76.45% (mais aprovacoes corretas) | 72.30% |
+| Prejuizo FP | R$1.63M | R$1.46M (menor risco) |
+| Receita Perdida FN | R$0.47M (menos oportunidade perdida) | R$0.54M |
+| Impacto Total | R$2.1M | R$2.0M |
+
+O RandomForest e mais conservador (rejeita mais, menos caloteiros aprovados). O RF Optimized e mais equilibrado (aprova mais bons clientes, mas aceita um pouco mais de risco).
+
+### Justificativa da selecao
+
+RF Optimized selecionado porque:
 1. Maior F1 (0.8254) entre todos os modelos
-2. Segundo menor impacto financeiro (R$2.1M)
-3. Excelente capacidade de discriminacao (AUC-ROC=0.97)
+2. A diferenca de impacto financeiro e pequena (R$100k vs RandomForest)
+3. Maior recall (76.45% vs 72.30%) significa menos bons clientes rejeitados
+4. AUC-ROC 0.975 (excelente capacidade de discriminacao)
 
-O RandomForest sem otimizacao tem impacto financeiro ligeiramente menor (R$2.0M), mas F1 inferior. A diferenca de R$100k e compensada pela melhor identificacao de bons clientes.
+Em escala, a diferenca de 2 pontos de F1 representa milhares de decisoes melhores. R$100k a mais de risco e aceitavel quando o modelo identifica significativamente mais bons clientes.
 
 ---
 

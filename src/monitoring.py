@@ -18,7 +18,7 @@ def detect_drift(df_train: pd.DataFrame, df_prod: pd.DataFrame,
                         "drift": var > threshold})
 
     n = sum(1 for r in results if r["drift"])
-    print(f"[monitoring] {n} features with drift (threshold={threshold}%) out of {len(results)}")
+    print(f"MONITORING: {n} features with drift (threshold={threshold}%) out of {len(results)}")
     return results
 
 
@@ -32,5 +32,5 @@ def check_new_categories(df_train: pd.DataFrame, df_prod: pd.DataFrame,
         new = set(df_prod[col].dropna().unique()) - set(df_train[col].dropna().unique())
         results.append({"feature": col, "new_categories": list(new) if new else [], "has_new": len(new) > 0})
         if new:
-            print(f"[monitoring] ALERT: {col} has new categories: {new}")
+            print(f"MONITORING: ALERT: {col} has new categories: {new}")
     return results

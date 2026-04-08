@@ -120,14 +120,14 @@ def train_model(spec: ModelSpec, X_train, y_train, X_test, y_test,
         mlflow.log_dict({"tn": int((cm := confusion_matrix(y_test, y_pred))[0, 0]), "fp": int(cm[0, 1]), "fn": int(cm[1, 0]), "tp": int(cm[1, 1])}, "confusion_matrix.json")
 
         reduction_tag = f" ({spec.reduction})" if spec.reduction else ""
-        print(f"  [{spec.name}] f1={metrics['f1_score']:.4f} acc={metrics['accuracy']:.4f} gap={metrics['f1_gap']:.4f} time={train_time:.1f}s{reduction_tag}")
+        print(f"TRAIN: {spec.name} f1={metrics['f1_score']:.4f} acc={metrics['accuracy']:.4f} gap={metrics['f1_gap']:.4f} time={train_time:.1f}s{reduction_tag}")
 
         return {"run_id": run.info.run_id, "model": model, "y_pred": y_pred, "metrics": metrics, "name": spec.name}
 
 
 def run_experiments(experiments, X_train, y_train, X_test, y_test, execution_id, mode, random_state=42):
     """Trains all models from experiments config."""
-    print(f"\n[train] running {len(experiments.models)} models (mode={mode}, id={execution_id})")
+    print(f"TRAIN: running {len(experiments.models)} models (mode={mode}, id={execution_id})")
     results = [train_model(s, X_train, y_train, X_test, y_test, execution_id, mode, random_state) for s in experiments.models]
-    print(f"[train] {len(results)} models registered in mlflow")
+    print(f"TRAIN: {len(results)} models registered in mlflow")
     return results

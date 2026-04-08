@@ -15,7 +15,7 @@ def compare_models(experiment_name: str, execution_id: str | None = None) -> pd.
     runs = mlflow.search_runs(experiment_names=[experiment_name], filter_string=filter_str, order_by=["metrics.f1_score DESC"])
 
     if runs.empty:
-        print("[evaluate] no runs found")
+        print("EVALUATE: no runs found")
         return pd.DataFrame()
 
     cols = {"tags.mlflow.runName": "model", "tags.execution_id": "execution_id",
@@ -28,7 +28,7 @@ def compare_models(experiment_name: str, execution_id: str | None = None) -> pd.
     if "metrics.auc_roc" in runs.columns:
         result["auc_roc"] = runs["metrics.auc_roc"]
 
-    print(f"[evaluate] {len(result)} models found")
+    print(f"EVALUATE: {len(result)} models found")
     return result
 
 
@@ -45,5 +45,5 @@ def financial_analysis(y_test, predictions: dict, X_test: pd.DataFrame) -> pd.Da
         results.append({"model": name, "fp_count": int(fp.sum()), "fn_count": int(fn.sum()),
                         "fp_loss": float(fp_loss), "fn_loss": float(fn_loss), "total_impact": float(fp_loss + fn_loss)})
 
-    print(f"[evaluate] financial analysis for {len(results)} models")
+    print(f"EVALUATE: financial analysis for {len(results)} models")
     return pd.DataFrame(results).sort_values("total_impact")

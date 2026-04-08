@@ -5,11 +5,11 @@ from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
-from src.config import QualityConfig, ColumnExpectation
+from src.config import QualityConfig
 
 
 def run_quality_checks(df: pd.DataFrame, quality: QualityConfig) -> list[dict]:
-    """Runs all table and column expectations. Returns list of results."""
+    """Runs all table and column expectations."""
     results = []
 
     count = len(df)
@@ -39,8 +39,7 @@ def run_quality_checks(df: pd.DataFrame, quality: QualityConfig) -> list[dict]:
             results.append({"type": "allowed_values", "column": col_name, "passed": len(unexpected) == 0, "detail": f"unexpected: {unexpected}" if unexpected else "ok"})
 
     passed = sum(1 for r in results if r["passed"])
-    failed = len(results) - passed
-    print(f"[quality] {passed} passed, {failed} failed ({len(results)} checks)")
+    print(f"QUALITY: {passed} passed, {len(results) - passed} failed ({len(results)} checks)")
     return results
 
 
@@ -63,5 +62,5 @@ def save_report(results: list[dict], output_dir: str = "outputs/quality_reports"
             "results": results,
         }, f, indent=2, ensure_ascii=False, default=str)
 
-    print(f"[quality] report: {filename}")
+    print(f"QUALITY: report saved at {filename}")
     return filename

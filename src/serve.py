@@ -14,7 +14,7 @@ mlflow.set_tracking_uri("sqlite:///mlflow.db")
 def load_model(run_id: str):
     """Loads a saved model by run_id."""
     model = mlflow.sklearn.load_model(f"runs:/{run_id}/model")
-    print(f"[serve] model loaded from run {run_id}")
+    print(f"SERVE: model loaded from run {run_id}")
     return model
 
 
@@ -50,7 +50,7 @@ def run_service():
     mlflow.set_experiment("loan_approval_production")
     runs = mlflow.search_runs(order_by=["start_time DESC"])
     if runs.empty:
-        print("[serve] no production models. Run 'make prod' first.")
+        print("SERVE: no production models. Run 'make prod' first.")
         return
 
     best = runs.iloc[0]
