@@ -1,0 +1,13 @@
+# pipeline.yaml - Execution settings
+
+paths:
+  raw_data_dir: "data/raw"
+  processed_data_dir: "data/processed"
+
+random_state: 42
+test_size: 0.2
+stratify: true
+
+drift:
+  historical_fraction: 0.7
+  threshold_pct: 10

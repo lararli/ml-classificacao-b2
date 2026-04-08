@@ -1,0 +1,68 @@
+# quality.yaml - Data quality expectations
+# Validated before any training. Pipeline alerts on failure.
+
+table:
+  min_rows: 40000
+  max_rows: 55000
+
+columns:
+  person_age:
+    min_value: 18
+    max_value: 100
+    nullable: false
+
+  person_income:
+    min_value: 0
+    nullable: false
+
+  person_emp_exp:
+    min_value: 0
+    nullable: false
+
+  loan_amnt:
+    min_value: 500
+    max_value: 50000
+    nullable: false
+
+  loan_int_rate:
+    min_value: 0
+    max_value: 30
+    nullable: false
+
+  loan_percent_income:
+    min_value: 0
+    max_value: 1
+    nullable: false
+
+  cb_person_cred_hist_length:
+    min_value: 0
+    nullable: false
+
+  credit_score:
+    min_value: 300
+    max_value: 850
+    nullable: false
+
+  loan_status:
+    allowed_values: [0, 1]
+    nullable: false
+
+  person_gender:
+    allowed_values: ["male", "female"]
+    nullable: false
+
+  person_education:
+    allowed_values: ["High School", "Associate", "Bachelor", "Master", "Doctorate"]
+    nullable: false
+
+  person_home_ownership:
+    allowed_values: ["RENT", "OWN", "MORTGAGE", "OTHER"]
+    nullable: false
+
+  loan_intent:
+    allowed_values: ["PERSONAL", "EDUCATION", "MEDICAL", "VENTURE", "HOMEIMPROVEMENT", "DEBTCONSOLIDATION"]
+    nullable: false
+
+  previous_loan_defaults_on_file:
+    allowed_values: ["Yes", "No"]
+    nullable: false

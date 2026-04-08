@@ -1,0 +1,9 @@
+# experiments_prod.yaml
+# Production models. Executed in the monthly pipeline.
+
+models:
+- name: SklearnRF_Optimized
+  model_class: sklearn.ensemble.RandomForestClassifier
+  params:
+    random_state: 42
+    n_jobs: -1
