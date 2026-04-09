@@ -1,5 +1,5 @@
 # experiments_prod.yaml
-# Production models. Executed in the monthly pipeline.
+# Production model.
 
 models:
 - name: SklearnRF_Optimized
@@ -7,3 +7,7 @@ models:
   params:
     random_state: 42
     n_jobs: -1
+    min_samples_split: 2
+    n_estimators: 200
+    min_samples_leaf: 1
+    max_depth: null

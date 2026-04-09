@@ -20,7 +20,7 @@ Classificacao binaria: prever se uma solicitacao deve ser aprovada (1) ou rejeit
 
 ### Metricas de sucesso
 
-- **Tecnica:** F1-Score, que equilibra nao aprovar caloteiros (precision) e nao perder bons clientes (recall).
+- **Tecnica:** F1-Score, que equilibra nao aprovar caloteiros (precision) e nao perder bons clientes (recall). Usamos F1 em vez de accuracy porque o dataset e desbalanceado (78% rejeitados). Um modelo que rejeita todo mundo tem 78% de accuracy mas F1=0.
 - **Negocio:** impacto financeiro total (custo dos erros em reais).
 
 ### Evolucao do projeto
@@ -35,89 +35,136 @@ Neste projeto, o desafio mudou: nao se trata mais de encontrar o melhor modelo, 
 
 ### De notebook para engenharia
 
-No projeto anterior, toda a logica vivia num notebook de 89 celulas. Isso funciona para explorar, mas apresenta limitacoes para operacao:
+No projeto anterior, toda a logica vivia num notebook de 89 celulas. Isso funciona para explorar, mas apresenta limitacoes para operacao. Neste projeto, cada responsabilidade tem seu modulo em `src/`, as configuracoes ficam em `config/` (YAML validado por dataclasses), e a execucao e feita via Makefile.
 
-- Dificil de reutilizar partes do codigo em outros contextos
-- Impossivel de testar modulos isoladamente
-- Sem separacao entre configuracao e logica
-- Sem rastreabilidade de experimentos
-
-Neste projeto, cada responsabilidade tem seu modulo:
-
-| Modulo | O que faz |
-|--------|-----------|
-| `config.py` | Carrega e valida configuracoes |
-| `ingestion.py` | Baixa dados e converte para Parquet |
-| `quality_checks.py` | Valida qualidade dos dados |
-| `preprocessing.py` | Prepara dados para treinamento |
-| `reduction.py` | Reducao de dimensionalidade (PCA/LDA) |
-| `train.py` | Treina modelos e registra no MLflow |
-| `evaluate.py` | Compara modelos e calcula impacto financeiro |
-| `serve.py` | Carrega modelo salvo e faz predicao |
-| `monitoring.py` | Detecta mudancas nos dados (drift) |
-| `custom_models.py` | Modelos customizados escritos manualmente |
-
-A vantagem dessa modularizacao vai alem da organizacao: cada modulo pode ser reutilizado, substituido ou testado independentemente. Se amanha a estrategia de validacao de qualidade precisar mudar (por exemplo, usar uma biblioteca diferente ou adicionar regras especificas por fonte de dados), basta alterar `quality_checks.py` sem impactar o restante do pipeline.
-
-### Configuracao via YAML + dataclasses
-
-As configuracoes do projeto sao externas ao codigo, definidas em arquivos YAML:
-
-- `data.yaml`: contrato de dados - quais colunas existem, tipos, fonte
-- `pipeline.yaml`: parametros de execucao - random_state, proporcao treino/teste
-- `quality.yaml`: regras de qualidade - ranges aceitaveis, nulos, categorias
-- `experiments_prod.yaml`: modelo que roda em producao
-- `experiments_test.yaml`: modelos em fase de teste
-
-Cada YAML e validado por uma dataclass Python. Campos obrigatorios geram erro se faltarem. Campos opcionais tem valor padrao. Isso garante que erros de configuracao aparecem na carga, nao no meio do treinamento.
-
-O professor demonstrou YAML com dicionarios Python. Adicionamos dataclasses como camada de validacao porque e a pratica usada profissionalmente. O YAML continua sendo a interface de configuracao (editavel sem mexer no codigo), e a dataclass garante que a estrutura esta correta.
-
-### Separacao de ambientes
-
-O pipeline opera em dois modos, controlados por um parametro na execucao:
-
-- **make test:** carrega `experiments_test.yaml` (8 modelos), salva no MLflow experiment de experimentacao, roda reducao de dimensionalidade.
-- **make prod:** carrega `experiments_prod.yaml` (1 modelo), salva no MLflow experiment de producao, pula reducao.
-
-Dados processados e relatorios ficam em pastas separadas por modo e mes de execucao, sem sobrescrita.
-
-### Makefile como pipeline de CI/CD simulado
-
-O Makefile funciona como um pipeline de CI/CD: cada comando e uma etapa que valida,
-treina, compara, promove e monitora. A sequencia completa de deploy:
+### Repositorio
 
 ```
-make setup → make configs → make test → make compare → make promote → make prod → make post-deploy
+config/                     Configuracoes (YAML)
+  data.yaml                 Contrato de dados: colunas, tipos, fonte
+  pipeline.yaml             Execucao: random_state, split, drift
+  quality.yaml              34 regras de qualidade
+  experiments_test.yaml     10 modelos para experimentacao
+  experiments_prod.yaml     1 modelo para producao
+
+src/                        Modulos do pipeline
+  config.py                 Dataclasses que validam os YAMLs
+  ingestion.py              Download + CSV → Parquet
+  quality_checks.py         Validacao de qualidade
+  preprocessing.py          RobustScaler + OneHotEncoder via ColumnTransformer
+  train.py                  Treina modelos e registra no MLflow
+  evaluate.py               Compara modelos e calcula impacto financeiro
+  serve.py                  Servico de inferencia
+  monitoring.py             Deteccao de drift
+
+models/                     Modelos customizados (DS edita aqui)
+  custom_models.py          RuleBasedClassifier (regras de negocio)
+
+scripts/                    Ferramentas de apoio
+  compare.py                Tabela comparativa no terminal + CSV
+  promote.py                Promove modelo para producao
+  post_deploy.py            Compara run atual vs anterior
 ```
 
-| Etapa | Comando | O que faz |
-|-------|---------|-----------|
-| Setup | `make setup` | Cria ambiente e instala dependencias |
-| Gate | `make configs` | Valida configuracoes (se falhar, para) |
-| Experimentacao | `make test` | Treina todos os modelos, registra no MLflow |
-| Analise | `make compare` | Tabela comparativa + exporta CSV |
-| Promocao | `make promote MODEL=nome` | Move modelo escolhido para producao |
-| Producao | `make prod` | Treina modelo de producao |
-| Pos-deploy | `make post-deploy` | Compara run atual com anterior (detecta degradacao) |
-| Inferencia | `make serve` | Inicia servico de inferencia (CLI) |
-| Visual | `make mlflow` | Abre interface de resultados |
+### Workflows do pipeline
 
-Para a manutencao mensal, a sequencia e mais curta:
+O pipeline opera em tres cenarios:
 
+**Workflow 1: Primeiro deploy**
+
+```mermaid
+flowchart TD
+    A[make setup] --> B[make configs]
+    B -->|invalido| B1[PARA: corrigir YAML]
+    B -->|ok| C[make test]
+    C --> C1[Ingestao: Kaggle → Parquet]
+    C1 --> C2[Qualidade: 34 expectations]
+    C2 --> C3[Treino: 10 modelos]
+    C3 --> C4[Selecao: F1 + impacto financeiro]
+    C4 --> C5[Inferencia + Drift]
+    C5 --> D[make compare]
+    D --> E{Qual modelo promover?}
+    E --> F[make promote MODEL=SklearnRF_Optimized]
+    F --> G[make prod]
+    G --> H[make serve]
 ```
-make prod → make post-deploy
+
+**Workflow 2: Execucao mensal**
+
+```mermaid
+flowchart TD
+    A[Time de dados atualiza a base] --> B[make prod ID=052026]
+    B --> B1[Ingestao + Qualidade + Treino]
+    B1 --> C[make post-deploy]
+    C --> D{F1 caiu mais de 2%?}
+    D -->|NAO| E[STABLE: continua]
+    D -->|SIM| F[DEGRADED: investigar]
+    F --> G[make test]
+    G --> H[make compare]
+    H --> I[make promote + make prod]
 ```
 
-Se `post-deploy` detectar degradacao (F1 caiu mais de 0.02), a recomendacao e rodar `make test` para re-avaliar todos os modelos.
+**Workflow 3: Testar novo modelo**
 
-Em producao real, esses comandos seriam etapas de um pipeline de CI/CD automatizado (GitHub Actions, GitLab CI, Jenkins). Cada etapa teria criterios de aprovacao: configs validas → qualidade ok → F1 acima do limiar → deploy automatico.
+```mermaid
+flowchart TD
+    A[DS edita experiments_test.yaml] --> B[make test]
+    B --> C[make compare]
+    C --> D{Novo modelo e melhor?}
+    D -->|SIM| E[make promote MODEL=NovoModelo]
+    E --> F[make prod]
+    D -->|NAO| G[DS ajusta parametros]
+    G --> A
+```
 
-### Flexibilidade de inputs
+### Workflow com dados reais: primeiro deploy executado
 
-Nem sempre e possivel garantir que todas as fontes de dados tenham o mesmo formato. Em cenarios reais, diferentes fontes podem trazer informacoes diferentes. Por exemplo, um estado envia dados de licencas com 10 colunas e outro envia com 15. O importante e encontrar um ponto em comum no output: todos os modelos recebem as mesmas features padronizadas e produzem o mesmo tipo de resultado.
+```mermaid
+flowchart LR
+    KAGGLE["Kaggle<br/>45k rows<br/>14 cols"]
+    PARQUET["Parquet<br/>Snappy"]
+    SCHEMA["Schema<br/>validado"]
+    QUALITY["Quality<br/>33 ok, 1 falha"]
+    PREPROC["Preprocessing<br/>22 features<br/>36k train / 9k test"]
+    TRAIN["Treino<br/>10 modelos"]
+    SELECT["Selecao<br/>RF_Optimized<br/>F1=0.83"]
+    FINANCIAL["Financeiro<br/>R$2.1M"]
+    PROMOTE["Promote<br/>experiments_prod.yaml"]
+    PROD["Producao<br/>1 modelo"]
+    SERVE["Inferencia<br/>ao vivo"]
 
-A arquitetura que construimos permite isso. O contrato de dados (`data.yaml`) define o formato padrao. Se amanha uma nova fonte de dados precisar ser integrada, basta criar um preprocessamento especifico para essa fonte que converte os dados para o formato do contrato. O modelo nao muda - ele sempre recebe features padronizadas. A complexidade fica na ingestao, nao no treinamento.
+    KAGGLE --> PARQUET --> SCHEMA --> QUALITY --> PREPROC --> TRAIN --> SELECT --> FINANCIAL --> PROMOTE --> PROD --> SERVE
+```
+
+Resultados do treino (10 modelos):
+
+```mermaid
+flowchart LR
+    D["Dummy<br/>F1=0.00"] -.-> P["Perceptron<br/>F1=0.66"]
+    R["RuleBased<br/>F1=0.00"] -.-> P
+    P -.-> DT1["DT sem reg<br/>F1=0.77<br/>overfitting"]
+    DT1 -.-> DT2["DT reg<br/>F1=0.78"]
+    DT2 -.-> DT3["DT opt<br/>F1=0.81"]
+    DT3 -.-> RF1["RF<br/>F1=0.81"]
+    RF1 -.-> RF2["RF Opt<br/>F1=0.83"]
+    RF2 -.-> PCA["RF+PCA<br/>F1=0.79"]
+    RF2 -.-> LDA["RF+LDA<br/>F1=0.66"]
+
+    style D fill:#ef4444,color:#fff
+    style R fill:#ef4444,color:#fff
+    style DT1 fill:#f59e0b,color:#000
+    style RF2 fill:#10b981,color:#000
+    style PCA fill:#64748b,color:#fff
+    style LDA fill:#64748b,color:#fff
+```
+
+### Decisoes de configuracao
+
+As configuracoes sao externas ao codigo, definidas em 5 arquivos YAML, cada um validado por uma dataclass Python. Campos obrigatorios geram erro imediato na carga. Campos opcionais tem valor padrao.
+
+O pipeline opera em dois modos controlados por parametro: `make test` (experimentacao, 10 modelos) e `make prod` (producao, 1 modelo). Dados e relatorios ficam em pastas separadas por modo e execution_id, sem sobrescrita.
+
+O Makefile funciona como CI/CD simulado. Em producao real, seriam etapas de GitHub Actions ou similar.
 
 ---
 
@@ -125,47 +172,19 @@ A arquitetura que construimos permite isso. O contrato de dados (`data.yaml`) de
 
 ### Dataset
 
-Loan Approval Classification (Kaggle): 45.000 solicitacoes de emprestimo com 14 colunas.
+Loan Approval Classification (Kaggle): 45.000 solicitacoes de emprestimo com 14 colunas (8 numericas, 5 categoricas, 1 target). Desbalanceamento: 78% rejeitados, 22% aprovados.
 
-- 8 numericas: idade, renda, experiencia profissional, valor do emprestimo, taxa de juros, percentual da renda comprometido, historico de credito, score de credito
-- 5 categoricas: genero, escolaridade, tipo de moradia, finalidade do emprestimo, historico de calote
-- 1 alvo: aprovado (22%) ou rejeitado (78%)
+### Ingestao e armazenamento
 
-### Ingestao
+Dados baixados do Kaggle e convertidos para Parquet (compressao Snappy), um formato colunar mais eficiente que CSV. Neste projeto usamos armazenamento local. Em producao real, a escolha dependeria da infraestrutura (data warehouse, data lake, banco relacional).
 
-O dataset e baixado e convertido de CSV para Parquet (compressao Snappy). Parquet armazena dados por coluna, o que permite ler apenas as colunas necessarias e ocupa menos espaco.
+### Contrato e qualidade
 
-Neste projeto usamos Parquet como camada de armazenamento local. Em ambiente de producao real, a escolha dependeria da infraestrutura da empresa, podendo ser um data warehouse, data lake, ou banco relacional, conforme volume e frequencia de acesso.
+O `data.yaml` define quais colunas o pipeline espera. Na ingestao, o schema e validado. 34 regras de qualidade no `quality.yaml` verificam ranges, nulos e categorias antes de qualquer treino. Resultado: 33 ok, 1 falha (7 registros com idade > 100, outliers reais mantidos).
 
-### Contrato de dados
+### Preprocessamento
 
-O `data.yaml` define quais colunas o pipeline espera. Na ingestao, o sistema verifica se todas as colunas existem no dataset. Se o time de dados alterar o formato, o pipeline para com erro claro antes de treinar.
-
-### Validacao de qualidade
-
-34 regras de qualidade definidas no `quality.yaml`:
-
-- Tabela: entre 40.000 e 55.000 linhas
-- Numericas: ranges (idade 18-100, score 300-850), sem nulos
-- Categoricas: valores permitidos (loan_status so 0/1, historico de calote so Yes/No)
-
-Resultado: 33 regras passaram, 1 falhou. 7 registros com idade acima de 100 anos (outliers reais do dataset). Decidimos manter porque o modelo consegue lidar e sao dados reais.
-
-### Limitacoes do dataset
-
-- **Desbalanceamento:** 78% rejeitados, 22% aprovados. Tratado com StratifiedKFold e F1-Score em vez de accuracy.
-- **Sem dados temporais:** nao e possivel analisar evolucao temporal nem drift real.
-- **Outliers de idade:** 7 registros com idade acima de 100 anos.
-
-### Pipeline de preprocessamento
-
-Aplicamos transformacoes diferentes por tipo de coluna:
-- **Numericas:** RobustScaler, que normaliza usando mediana, resistente a valores extremos (renda tem outliers significativos)
-- **Categoricas:** OneHotEncoder, que transforma categorias em colunas 0/1
-
-Resultado: 13 colunas originais viram 22 apos a transformacao.
-
-O preprocessador aprende as estatisticas apenas dos dados de treino e aplica a mesma transformacao nos dados de teste, prevenindo vazamento de informacao.
+RobustScaler para numericas (usa mediana, resistente a outliers de renda) e OneHotEncoder para categoricas (com drop='first' para evitar colunas redundantes). 13 colunas originais viram 22 apos encoding. O preprocessador aprende estatisticas apenas do treino para evitar vazamento de informacao.
 
 ---
 
@@ -173,230 +192,256 @@ O preprocessador aprende as estatisticas apenas dos dados de treino e aplica a m
 
 ### Dois tipos de modelos
 
-O pipeline suporta dois caminhos para incluir modelos:
-
-**Modelos do scikit-learn (declarativos):** definidos no YAML com classe e parametros. O pipeline instancia automaticamente. O time de dados nao escreve codigo. So configura.
-
-**Modelos customizados (codigo):** escritos em `src/custom_models.py`. Implementam a mesma interface (`fit` e `predict`). Referenciados no YAML da mesma forma. Isso permite logica especifica de negocio que nao existe em bibliotecas prontas.
-
-Ambos passam pelas mesmas etapas: mesmos dados, mesma validacao, mesmo preprocessamento, mesmas metricas, mesmo registro no MLflow.
-
-### Modelo customizado: regras de negocio
-
-Implementamos um classificador deterministico como baseline. Ele aplica regras fixas que um analista de credito usaria manualmente:
-
-- Se o cliente tem historico de calote → rejeitar
-- Se a parcela compromete mais de 35% da renda → rejeitar
-- Se o score de credito esta abaixo de 600 → rejeitar
-- Caso contrario → aprovar
-
-Este modelo nao usa estatistica. Demonstra que regras fixas sao insuficientes para o problema (F1=0.00, nao aprovou ninguem corretamente). Isso justifica a necessidade de modelos de machine learning.
+O pipeline aceita modelos sklearn (declarados no YAML, instanciados automaticamente) e modelos customizados (escritos em `models/custom_models.py`, com interface fit/predict). Ambos passam pelas mesmas etapas e sao registrados no MLflow.
 
 ### Resultados
 
 | Modelo | Tipo | F1 | Overfitting | Tempo |
 |--------|------|:---:|:---:|:---:|
-| SklearnDummy | Baseline sklearn | 0.0000 | - | 0.0s |
-| CustomRuleBased | Baseline customizado | 0.0000 | - | 0.0s |
+| SklearnDummy | Baseline sklearn | 0.0000 | nenhum | 0.0s |
+| CustomRuleBased | Baseline customizado | 0.0000 | nenhum | 0.0s |
 | SklearnPerceptron | Linear | 0.6641 | nenhum | 0.0s |
-| SklearnDTNoRegularization | Arvore | 0.7722 | severo | 0.1s |
-| SklearnDTRegularized | Arvore | 0.7836 | nenhum | 0.1s |
-| SklearnDTOptimized | Arvore | 0.8055 | baixo | 5.4s |
+| SklearnDT_NoRegularization | Arvore | 0.7722 | severo | 0.1s |
+| SklearnDT_Regularized | Arvore | 0.7836 | nenhum | 0.1s |
+| SklearnDT_Optimized | Arvore | 0.8055 | baixo | 5.4s |
 | SklearnRandomForest | Ensemble | 0.8053 | baixo | 0.3s |
-| **SklearnRFOptimized** | **Ensemble** | **0.8254** | **aceitavel** | **38s** |
+| **SklearnRF_Optimized** | **Ensemble** | **0.8254** | **aceitavel** | **38s** |
+| SklearnRF_PCA | Ensemble + PCA | 0.7891 | alto | 3.3s |
+| SklearnRF_LDA | Ensemble + LDA | 0.6643 | alto | 1.1s |
 
 ### Evolucao
 
-A progressao dos resultados demonstra que:
-
-1. **Regras deterministicas nao funcionam** (F1=0.00): tanto o baseline automatico quanto as regras de negocio falharam em identificar bons clientes. Os dois tem 78% de acuracia (simplesmente rejeitam todo mundo), mas F1=0, nao aprovaram ninguem.
-
-2. **Modelo linear e insuficiente** (F1=0.66): o Perceptron tenta separar as classes com uma linha reta. Funciona parcialmente, mas o problema nao e linear.
-
-3. **Arvore sem limites decora** (F1=0.77 mas gap=0.23): acerta tudo no treino, erra no teste. Regularizacao resolve (gap cai para 0.01).
-
-4. **Ensemble melhora e estabiliza** (F1=0.83): 200 arvores votando juntas. Mais robusto que arvore unica.
-
-### Rastreamento com MLflow
-
-Cada modelo registra no MLflow: hiperparametros, metricas (F1, accuracy, precision, recall, AUC-ROC), tempo de treino, indicador de overfitting, e o modelo salvo. Modelos sao registrados no Model Registry com versionamento automatico.
+Regras deterministicas (F1=0.00) → modelo linear (0.66) → arvore com overfitting (0.77) → arvore regularizada (0.78) → ensemble otimizado (0.83). Cada aumento de complexidade trouxe ganho mensuravel.
 
 ---
 
 ## 5. Reducao de Dimensionalidade
 
-### Por que testar reducao
+Testamos PCA (comprime features sem olhar rotulos) e LDA (comprime olhando rotulos). t-SNE descartado por nao ter `transform()`.
 
-Com 22 features apos o preprocessamento, a pergunta e: podemos obter resultados iguais ou melhores usando menos features? Menos features significam treino mais rapido e modelo mais simples.
+PCA reduziu de 22 para 17 features (95.4% variancia retida) mas perdeu 3.6 pontos de F1. LDA reduziu para 1 feature e perdeu 16 pontos. Com 22 features, dimensionalidade ja e gerenciavel. Reducao nao se justifica.
 
-### Escolha das tecnicas
-
-Dentre PCA, LDA e t-SNE, escolhemos PCA e LDA:
-
-- **PCA:** encontra os eixos onde os dados mais variam. Nao olha os rotulos. Pode ser aplicado em dados novos (`transform()`).
-- **LDA:** encontra o eixo que melhor separa as classes. Usa os rotulos. Para problema com 2 classes, gera 1 unico eixo.
-- **t-SNE:** descartado porque nao pode ser aplicado em dados novos (nao tem `transform()`). Serve apenas para visualizacao.
-
-Ambas foram integradas como etapas do Pipeline do scikit-learn, garantindo que a reducao aprende apenas com dados de treino.
-
-### Resultados
-
-| Configuracao | Features | F1 | Tempo |
-|-------------|:---:|:---:|:---:|
-| Sem reducao | 22 | **0.8254** | 38s |
-| Com PCA (95% variancia) | 17 | 0.7891 | 3s |
-| Com LDA | 1 | 0.6643 | 1s |
-
-### Por que NAO usamos reducao em producao
-
-PCA reduziu de 22 para 17 features mas perdeu 3.6 pontos de F1. O ganho em tempo (38s para 3s) nao compensa a perda de performance neste caso.
-
-LDA comprimiu 22 features em 1 unico numero. Perdeu 16 pontos de F1. Informacao demais descartada.
-
-Com apenas 22 features, a dimensionalidade ja e gerenciavel. Reducao nao se justifica. Por isso, em producao, rodamos o modelo sem reducao. A reducao existe apenas na experimentacao como evidencia de que essa decisao foi tomada com base em dados, nao por omissao.
+Testamos apenas no RF_Optimized (melhor modelo) porque se reducao nao melhora o melhor, nao vai melhorar os piores.
 
 ---
 
 ## 6. Selecao do Modelo Final
 
-### Comparativo
-
-| Modelo | F1 | Precision | Recall | Impacto Financeiro |
-|--------|:---:|:---:|:---:|---:|
-| **SklearnRFOptimized** | **0.8254** | 0.8968 | 0.7645 | **R$2.1M** |
-| SklearnDTOptimized | 0.8055 | 0.8746 | 0.7465 | R$2.5M |
-| SklearnRandomForest | 0.8053 | 0.9089 | 0.7230 | R$2.0M |
-| SklearnPerceptron | 0.6641 | 0.8116 | 0.5620 | R$4.4M |
-| CustomRuleBased | 0.0000 | 0.0000 | 0.0000 | R$2.8M |
-
 ### Analise financeira
 
-Cada erro do modelo tem um custo diferente, calculado com valores reais do dataset:
+Cada erro tem custo calculado com valores reais do dataset:
+- **FP:** soma(loan_amnt) dos caloteiros aprovados. Banco perde 100% do emprestimo.
+- **FN:** soma(loan_amnt x loan_int_rate / 100) dos bons clientes rejeitados. Banco perde os juros.
 
-| Tipo de Erro | O que acontece | Como calculamos | Formula |
-|---|---|---|---|
-| Falso Positivo (FP) | Aprovou cliente que deu calote | Banco perde o valor total do emprestimo | soma(loan_amnt) dos FPs |
-| Falso Negativo (FN) | Rejeitou cliente que pagaria | Banco perde os juros que teria ganho | soma(loan_amnt x loan_int_rate / 100) dos FNs |
-
-O prejuizo de FP e tipicamente maior que de FN porque:
-- FP: perde 100% do valor emprestado (o dinheiro nao volta)
-- FN: perde apenas os juros (~10-15% do valor)
-
-Isso justifica a postura conservadora do modelo: e financeiramente mais seguro rejeitar um bom cliente (perder juros) do que aprovar um caloteiro (perder capital).
-
-### Resultados financeiros detalhados
-
-| Modelo | FP (qtd) | FN (qtd) | Prejuizo FP | Receita Perdida FN | Impacto Total |
+| Modelo | FP | FN | Prejuizo FP | Receita Perdida FN | Impacto Total |
 |--------|:---:|:---:|---:|---:|---:|
 | SklearnRandomForest | 145 | 554 | R$1.46M | R$0.54M | R$2.0M |
-| SklearnRFOptimized | 176 | 471 | R$1.63M | R$0.47M | R$2.1M |
-| SklearnDTOptimized | 214 | 507 | R$1.94M | R$0.52M | R$2.5M |
+| SklearnRF_Optimized | 176 | 471 | R$1.63M | R$0.47M | R$2.1M |
+| SklearnDT_Optimized | 214 | 507 | R$1.94M | R$0.52M | R$2.5M |
 | SklearnDummy | 0 | 2000 | R$0 | R$2.84M | R$2.8M |
-| CustomRuleBased | 0 | 2000 | R$0 | R$2.84M | R$2.8M |
 | SklearnPerceptron | 261 | 876 | R$3.60M | R$0.83M | R$4.4M |
-| SklearnRFLDA | 646 | 684 | R$6.34M | R$0.74M | R$7.1M |
+| SklearnRF_LDA | 646 | 684 | R$6.34M | R$0.74M | R$7.1M |
 
-### Trade-off entre RF Optimized e Random Forest
+### Justificativa
 
-| Aspecto | RF Optimized | Random Forest |
-|---------|:---:|:---:|
-| F1 | 0.8254 (melhor) | 0.8053 |
-| Recall | 76.45% (mais aprovacoes corretas) | 72.30% |
-| Prejuizo FP | R$1.63M | R$1.46M (menor risco) |
-| Receita Perdida FN | R$0.47M (menos oportunidade perdida) | R$0.54M |
-| Impacto Total | R$2.1M | R$2.0M |
-
-O RandomForest e mais conservador (rejeita mais, menos caloteiros aprovados). O RF Optimized e mais equilibrado (aprova mais bons clientes, mas aceita um pouco mais de risco).
-
-### Justificativa da selecao
-
-RF Optimized selecionado porque:
-1. Maior F1 (0.8254) entre todos os modelos
-2. A diferenca de impacto financeiro e pequena (R$100k vs RandomForest)
-3. Maior recall (76.45% vs 72.30%) significa menos bons clientes rejeitados
-4. AUC-ROC 0.975 (excelente capacidade de discriminacao)
-
-Em escala, a diferenca de 2 pontos de F1 representa milhares de decisoes melhores. R$100k a mais de risco e aceitavel quando o modelo identifica significativamente mais bons clientes.
+RF Optimized selecionado: maior F1 (0.8254), AUC-ROC 0.975, diferenca de impacto financeiro pequena (R$100k vs RandomForest) compensada por recall superior (76.45% vs 72.30%, menos bons clientes rejeitados).
 
 ---
 
 ## 7. Operacionalizacao
 
-### Persistencia e versionamento
-
-Modelos sao salvos no MLflow e registrados no Model Registry com versionamento automatico. Qualquer versao pode ser recuperada pelo identificador do run.
-
 ### Inferencia
 
-O sistema de inferencia carrega o modelo salvo, aplica o mesmo preprocessamento usado no treino, e retorna a decisao (aprovado/rejeitado) com probabilidade.
+O servico (`make serve`) carrega o modelo de producao do MLflow, aplica o mesmo preprocessamento do treino, e retorna a decisao com probabilidade em tempo real. As 200 arvores do Random Forest votam para cada cliente.
 
-### Metricas de monitoramento
+### Monitoramento e drift
 
-Definimos metricas em dois niveis:
+Comparacao de estatisticas (media) de cada feature entre treino e producao. Limiar configuravel (padrao 10%). Verifica tambem se categorias novas apareceram. Na simulacao, nenhum drift detectado (esperado com mesmo dataset).
 
-**Tecnicas:** F1, accuracy, precision, recall, AUC-ROC, indicador de overfitting, tempo de treino.
+### Execucao mensal e consumo de dados
 
-**Negocio:** custo de emprestimos perdidos (falsos positivos), receita de juros perdida (falsos negativos), impacto financeiro total.
+A cada mes, o time de dados atualiza a base e o pipeline roda em producao. O fluxo completo:
 
-### Deteccao de drift
+```mermaid
+flowchart TD
+    A[Time de dados atualiza base] --> B[make prod ID=MMYYYY]
+    B --> C[Treino com dados acumulados]
+    C --> D[make post-deploy]
+    D --> E{Modelo degradou?}
+    E -->|NAO| F[STABLE]
+    E -->|SIM| G[make test para re-avaliar]
+    
+    C --> H[Resultados gerados]
+    H --> H1[MLflow: metricas + modelos]
+    H --> H2[CSV: outputs/results/]
+    H --> H3[JSON: quality reports]
+    
+    H1 --> I[Consumo externo]
+    H2 --> I
+    H3 --> I
+    I --> I1[Power BI / dashboards]
+    I --> I2[Alertas automatizados]
+    I --> I3[Relatorios de gestao]
+```
 
-O sistema monitora mudancas nos dados comparando estatisticas (media) de cada coluna entre dados de treino e dados novos. Se a variacao superar 10%, gera alerta. Tambem verifica se apareceram categorias novas que o modelo nunca viu.
+Cada execucao gera tres tipos de output consumiveis:
 
-Na simulacao realizada, nenhum drift foi detectado, resultado esperado por usar o mesmo dataset dividido aleatoriamente.
+| Output | Formato | Caminho | O que contem |
+|--------|---------|---------|-------------|
+| Metricas e modelos | SQLite | `mlflow.db` | F1, accuracy, precision, recall, AUC-ROC, tempo, parametros, modelos salvos por run |
+| Comparativo | CSV | `outputs/results/comparison_*.csv` | Tabela com todos os modelos, metricas, execution_id |
+| Qualidade | JSON | `outputs/quality_reports/{mode}/{id}/` | 34 expectations com passed/failed por execucao |
+
+Sistemas como Power BI conectam no CSV ou consultam o SQLite diretamente. O `execution_id` (MMYYYY) permite filtrar a execucao mais recente. Os dados de producao ficam sempre na pasta `production/{execution_id}`, separados da experimentacao.
+
+A decisao de negocio e: **o consumidor sempre le a ultima execucao.** Se o time de dados publicou dados de maio (052026), o Power BI filtra por `execution_id = 052026` e mostra as metricas daquela safra. O historico de execucoes anteriores fica preservado para comparacoes (ex: evolucao do F1 ao longo dos meses).
 
 ### Analise pos-deploy
 
-Apos cada execucao de producao, o sistema compara automaticamente a run atual com a anterior:
+O `make post-deploy` roda apos cada execucao mensal. Compara metricas da run atual com a anterior. Se F1 cair mais de 0.02, status DEGRADED e recomenda re-avaliar todos os modelos. Em producao real, esse alerta poderia ser integrado a sistemas de notificacao (Slack, email, PagerDuty).
 
-```
-make post-deploy
+### Ciclo mensal
 
-  metric              previous        current         change
-                      (032026)        (042026)
-  f1_score              0.8254          0.8291        +0.0037
-  accuracy              0.9281          0.9297        +0.0016
-  STATUS: STABLE
-```
+1. Time de dados atualiza a base
+2. `make prod` retrain com dados acumulados
+3. `make post-deploy` compara com versao anterior
+4. Se estavel, continua. Se degradou, `make test` re-avalia todos os modelos.
 
-Se o F1 cair mais de 0.02, o status muda para DEGRADED e recomenda investigar drift e re-avaliar modelos.
-
-### Estrategia de re-treinamento
-
-Ciclo mensal:
-1. Time de dados atualiza a base com novos registros
-2. `make prod` roda com dados acumulados (historicos + novos)
-3. `make post-deploy` compara com a versao anterior
-4. Se estavel, mantem. Se degradou, `make test` re-avalia todos os modelos.
-
-O retreino e completo (nao incremental) porque queremos garantir que o modelo aprenda todos os padroes historicos, nao apenas os mais recentes.
+Retreino completo (nao incremental) porque queremos que o modelo aprenda todos os padroes historicos.
 
 ---
 
-## 8. Conclusao
+## 8. Demo
 
-### Principais decisoes
+### Parte 1: Repositorio
 
-| Decisao | Por que |
-|---------|---------|
-| Scripts modulares | Cada peca pode ser reutilizada ou substituida independentemente |
-| YAML + dataclasses | Mudar configuracao sem mexer no codigo. Validacao automatica. |
-| Dois tipos de modelo (sklearn + custom) | Flexibilidade para usar modelos prontos ou implementar logica especifica |
+Abrir o projeto no IDE e mostrar a estrutura. Pontos a destacar:
+
+- `config/` com 5 YAMLs: tudo configuravel, nada hardcoded no codigo
+- `src/` com modulos independentes: cada arquivo faz uma coisa
+- `models/custom_models.py`: modelos escritos na mao (explicar abaixo)
+- `scripts/`: ferramentas de apoio (compare, promote, post-deploy)
+- `run_pipeline.py`: orquestrador que chama tudo em ordem
+- `Makefile`: CI/CD simulado com comandos padronizados
+- `archive/`: projeto anterior preservado (notebook monolitico)
+
+**Sobre o modelo customizado (CustomRuleBased):**
+
+Antes de usar machine learning, a pergunta natural e: "regras fixas nao resolvem?" Implementamos um classificador deterministico em `models/custom_models.py` que aplica regras que um analista de credito usaria manualmente:
+
+- Se o cliente ja deu calote antes: rejeitar
+- Se a parcela compromete mais de 35% da renda: rejeitar
+- Se o score de credito esta abaixo de 600: rejeitar
+- Caso contrario: aprovar
+
+Essas regras fazem sentido do ponto de vista de negocio. Mas o resultado (F1=0.00) mostra que regras fixas nao conseguem identificar bons clientes neste dataset. O modelo simplesmente rejeita todo mundo, igual ao Dummy. Isso justifica a necessidade de ML: o problema tem relacoes complexas entre as features que regras simples nao capturam.
+
+O ponto importante e que o modelo customizado roda no mesmo pipeline que os modelos sklearn. Mesmos dados, mesma qualidade, mesmo preprocessamento, mesmas metricas, mesmo MLflow. A interface e padrao (fit/predict), entao o pipeline nao liga se e regra fixa ou Random Forest.
+
+### Parte 2: Comandos
+
+**Limpar e rodar experimentacao:**
+
+```bash
+make clean
+make test
+```
+
+Esperar ~1 min. O output mostra cada etapa: ingestao (45k rows), qualidade (33 ok, 1 falha), treino (10 modelos com F1 de cada), selecao (RF_Optimized F1=0.83), inferencia e drift.
+
+**Comparar resultados:**
+
+```bash
+make compare
+```
+
+Tabela com todos os modelos ordenados por F1. Observar:
+- Baselines (Dummy, RuleBased) com F1=0.00: regras nao funcionam
+- Perceptron com 0.66: modelo linear nao basta
+- DT sem regularizacao com gap=0.23: overfitting (modelo decorou o treino)
+- RF_Optimized com 0.83: melhor resultado
+- PCA e LDA: pioraram (reducao nao compensa para 22 features)
+
+**Promover e rodar em producao:**
+
+```bash
+make promote MODEL=SklearnRF_Optimized
+make prod
+```
+
+O promote pega os parametros otimizados do MLflow (n_estimators=200, max_depth=null) e atualiza o YAML de producao. Em producao roda 1 modelo, sem reducao.
+
+**Inferencia ao vivo:**
+
+```bash
+make serve
+```
+
+Testar com cliente que sera **aprovado** (renda alta, parcela 6% da renda, sem calote):
+
+```json
+{"person_age": 26.0, "person_income": 181548.0, "person_emp_exp": 3, "loan_amnt": 10000.0, "loan_int_rate": 15.99, "loan_percent_income": 0.06, "cb_person_cred_hist_length": 3.0, "credit_score": 643, "person_gender": "female", "person_education": "Bachelor", "person_home_ownership": "MORTGAGE", "loan_intent": "DEBTCONSOLIDATION", "previous_loan_defaults_on_file": "No"}
+```
+
+Resultado esperado: APPROVED (probability ~0.83)
+
+Testar com cliente que sera **rejeitado** (parcela 16% da renda, emprestimo para venture, score mais baixo):
+
+```json
+{"person_age": 25.0, "person_income": 84973.0, "person_emp_exp": 2, "loan_amnt": 14000.0, "loan_int_rate": 5.42, "loan_percent_income": 0.16, "cb_person_cred_hist_length": 3.0, "credit_score": 634, "person_gender": "female", "person_education": "Bachelor", "person_home_ownership": "MORTGAGE", "loan_intent": "VENTURE", "previous_loan_defaults_on_file": "No"}
+```
+
+Resultado esperado: REJECTED (probability ~0.01)
+
+Mais exemplos para testar durante a demo:
+
+Aprovado (renda alta, parcela baixa, casa propria, sem calote):
+```json
+{"person_age": 40, "person_income": 150000, "person_emp_exp": 12, "loan_amnt": 8000, "loan_int_rate": 6.0, "loan_percent_income": 0.05, "cb_person_cred_hist_length": 15, "credit_score": 720, "person_gender": "male", "person_education": "Master", "person_home_ownership": "OWN", "loan_intent": "HOMEIMPROVEMENT", "previous_loan_defaults_on_file": "No"}
+```
+
+Rejeitado (calote anterior, parcela alta, score baixo):
+```json
+{"person_age": 23, "person_income": 30000, "person_emp_exp": 1, "loan_amnt": 20000, "loan_int_rate": 18.0, "loan_percent_income": 0.67, "cb_person_cred_hist_length": 2, "credit_score": 480, "person_gender": "male", "person_education": "High School", "person_home_ownership": "RENT", "loan_intent": "PERSONAL", "previous_loan_defaults_on_file": "Yes"}
+```
+
+O que o modelo faz: carrega do MLflow, aplica o mesmo preprocessamento do treino, e as 200 arvores votam. A feature mais importante e `loan_percent_income` (quanto da renda vai pra parcela). Digitar `quit` para sair.
+
+**Pos-deploy (simular segundo mes):**
+
+```bash
+make prod ID=052026
+make post-deploy
+```
+
+Compara as metricas de 042026 com 052026. Resultado esperado: STABLE (mesmos dados, mesmos resultados).
+
+A arquitetura suporta testes com dados diferentes: bastaria substituir o Parquet e rodar. O quality check detectaria anomalias, o post-deploy mostraria degradacao.
+
+---
+
+## 9. Decisoes tecnicas
+
+| Decisao | Justificativa |
+|---------|---------------|
+| Scripts modulares | Reutilizaveis, testaveis, substituiveis independentemente |
+| YAML + dataclasses | Configuracao externa com validacao de tipos |
+| Dois tipos de modelo (sklearn + custom) | Flexibilidade para modelos prontos e logica especifica |
 | RobustScaler | Dataset tem outliers significativos em renda |
-| PCA + LDA testados, nao usados em producao | Reducao piorou o resultado. Decisao baseada em evidencia. |
-| Parquet local | Adequado ao escopo. Em producao: banco de dados ou data lake conforme infraestrutura. |
-| SQLite para MLflow | Simples, local. Em producao: PostgreSQL ou similar. |
-| Retreino completo mensal | Preserva historico. scikit-learn treina rapido o suficiente. |
+| OneHotEncoder drop='first' | Evita colunas redundantes que confundem o modelo |
+| PCA + LDA testados, nao usados | Reducao piorou F1. Decisao baseada em evidencia. |
+| Reducao so no melhor modelo | Se nao melhora o melhor, nao melhora os piores |
+| Parquet | Adequado ao escopo. Producao real: conforme infraestrutura. |
+| SQLite para MLflow | Simples, local. Producao: PostgreSQL. |
+| Retreino completo mensal | Preserva historico. scikit-learn treina rapido. |
+| Makefile como CI/CD | Documenta e padroniza a execucao. Producao: GitHub Actions. |
+| Dois experiments MLflow | Experimentacao nao impacta producao |
+| execution_id por mes | Rastreabilidade. Sem sobrescrita. |
 
-### O que mudaria em ambiente de producao
+### O que mudaria em producao real
 
-- **Armazenamento:** Parquet local → banco de dados ou data lake
-- **Orquestracao:** Makefile → Airflow ou similar para agendamento
-- **Inferencia:** Script → API REST com endpoint HTTP
-- **Monitoramento:** Script manual → dashboard automatizado
-- **Testes:** Adicionar testes unitarios para cada modulo
-- **Deploy:** Makefile → CI/CD automatizado (GitHub Actions)
-- **Escala:** Local → containers com orquestracao
+Armazenamento → banco de dados. Orquestracao → Airflow. Inferencia → API HTTP. Monitoramento → dashboard. Testes unitarios. CI/CD automatizado. Containers.
 
 ### Aprendizado
 
-A principal mudanca neste projeto nao e tecnica, e de mentalidade. O foco deixa de ser maximizar uma metrica isolada e passa a ser garantir que o sistema e reprodutivel, rastreavel, e preparado para mudancas. O modelo e apenas uma peca de um sistema que precisa ser mantido, monitorado e atualizado continuamente.
+A principal mudanca neste projeto nao e tecnica, e de mentalidade. O foco deixa de ser maximizar uma metrica e passa a ser garantir que o sistema e reprodutivel, rastreavel, e preparado para mudancas. O modelo e uma peca de um sistema que precisa ser mantido, monitorado e atualizado continuamente.
