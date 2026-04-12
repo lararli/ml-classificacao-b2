@@ -11,6 +11,7 @@ logging.getLogger("mlflow").setLevel(logging.CRITICAL)
 
 import mlflow
 import pandas as pd
+from src.colors import ok, fail, warn, info, bold, header
 
 mlflow.set_tracking_uri("sqlite:///mlflow.db")
 
@@ -26,7 +27,7 @@ mode = "experimentation" if "experimentation" in experiment else "production"
 runs = mlflow.search_runs(experiment_names=[experiment], order_by=["start_time DESC"])
 
 if runs.empty:
-    print(f"no runs found in {experiment}")
+    print(fail(f"no runs found in {experiment}"))
     sys.exit(1)
 
 # keep only latest run per execution_id + model
@@ -34,7 +35,7 @@ runs = runs.drop_duplicates(subset=["tags.execution_id", "tags.mlflow.runName"],
 
 # ── 1. THE DATA ──
 print(f"\n{'=' * 64}")
-print(f"  ANALYSIS REPORT: {experiment}")
+print(f"  {bold('ANALYSIS REPORT:')} {experiment}")
 print(f"{'=' * 64}")
 
 # find the most recent parquet to show data samples
@@ -52,14 +53,14 @@ if data_path.exists():
     approved = (df["loan_status"] == 1).sum()
     rejected = (df["loan_status"] == 0).sum()
 
-    print(f"\n  1. THE DATA")
+    print(header("  1. THE DATA"))
     print(f"  {'─' * 58}")
     print(f"  source:    taweilo/loan-approval-classification-data")
     print(f"  rows:      {total:,}")
     print(f"  features:  {len(df.columns) - 1} ({df.select_dtypes('number').shape[1] - 1} numeric, {df.select_dtypes('object').shape[1]} categorical)")
     print(f"  target:    loan_status")
-    print(f"  approved:  {approved:,} ({approved/total:.1%})")
-    print(f"  rejected:  {rejected:,} ({rejected/total:.1%})")
+    print(f"  approved:  {ok(f'{approved:,} ({approved/total:.1%})')}")
+    print(f"  rejected:  {fail(f'{rejected:,} ({rejected/total:.1%})')}")
 
     # sample approved and rejected
     sample_approved = df[df["loan_status"] == 1].sample(5, random_state=42)
@@ -106,10 +107,10 @@ if data_path.exists():
     print(f"    avg credit score: {df['credit_score'].mean():.0f}")
     print(f"    avg interest rate:{df['loan_int_rate'].mean():>6.1f}%")
 else:
-    print(f"\n  (data file not found, skipping data samples)")
+    print(f"\n  {warn('(data file not found, skipping data samples)')}")
 
 # ── 2. THE EXPERIMENT ──
-print(f"\n  2. THE EXPERIMENT")
+print(header("  2. THE EXPERIMENT"))
 print(f"  {'─' * 58}")
 print(f"  mode:           {mode}")
 print(f"  total runs:     {len(runs)}")
@@ -117,7 +118,7 @@ print(f"  executions:     {len(exec_ids)}")
 print(f"  train/test:     80% / 20% (stratified)")
 
 # ── 3. RESULTS PER EXECUTION ──
-print(f"\n  3. RESULTS")
+print(header("  3. RESULTS"))
 print(f"  {'─' * 58}")
 
 all_results = []
@@ -129,13 +130,21 @@ for eid in exec_ids:
     print(f"\n  execution: {eid}  |  models: {len(subset)}")
     print(f"  {'model':<28} {'f1':>8} {'acc':>8} {'prec':>8} {'rec':>8}")
 
-    for _, row in subset.iterrows():
+    for rank, (_, row) in enumerate(subset.iterrows()):
         name = row.get("tags.mlflow.runName", "?")
         f1 = row.get("metrics.f1_score", 0)
         acc = row.get("metrics.accuracy", 0)
         prec = row.get("metrics.precision", 0)
         rec = row.get("metrics.recall", 0)
-        print(f"  {name:<28} {f1:>7.2%} {acc:>7.2%} {prec:>7.2%} {rec:>7.2%}")
+
+        # color the best model green, worst red, rest default
+        if rank == 0:
+            line = ok(f"  {name:<28} {f1:>7.2%} {acc:>7.2%} {prec:>7.2%} {rec:>7.2%}")
+        elif f1 < 0.01:
+            line = fail(f"  {name:<28} {f1:>7.2%} {acc:>7.2%} {prec:>7.2%} {rec:>7.2%}")
+        else:
+            line = f"  {name:<28} {f1:>7.2%} {acc:>7.2%} {prec:>7.2%} {rec:>7.2%}"
+        print(line)
 
         all_results.append({
             "execution_id": eid,
@@ -162,42 +171,50 @@ for eid in exec_ids:
     worst_f1 = subset["metrics.f1_score"].min()
     worst_name = subset.loc[subset["metrics.f1_score"].idxmin(), "tags.mlflow.runName"]
 
-    print(f"\n  4. KPIs (execution {eid})")
+    print(header(f"  4. KPIs (execution {eid})"))
     print(f"  {'─' * 58}")
-    print(f"  best model:              {best_name}")
-    print(f"  best f1:                 {best_f1:.2%}")
+    print(f"  best model:              {bold(best_name)}")
+    print(f"  best f1:                 {ok(f'{best_f1:.2%}')}")
     print(f"  best accuracy:           {best_acc:.2%}")
     print(f"  best precision:          {best_prec:.2%}  (false positives control)")
     print(f"  best recall:             {best_rec:.2%}  (missed approvals)")
-    print(f"  overfitting gap:         {best_gap:.4f}  {'(high - review regularization)' if best_gap > 0.10 else '(acceptable)'}")
+
+    gap_color = warn if best_gap > 0.10 else ok
+    gap_note = "(high - review regularization)" if best_gap > 0.10 else "(acceptable)"
+    print(f"  overfitting gap:         {gap_color(f'{best_gap:.4f}')}  {gap_note}")
+
     print(f"  train time:              {best_time:.1f}s")
     print(f"  avg f1 (all models):     {avg_f1:.2%}")
-    print(f"  worst model:             {worst_name} ({worst_f1:.2%})")
+    print(f"  worst model:             {fail(f'{worst_name} ({worst_f1:.2%})')}")
     print(f"  f1 spread:               {best_f1 - worst_f1:.2%}")
 
     # interpretation
     if best_f1 >= 0.85:
+        status_color = ok
         status = "EXCELLENT"
         note = "model is production-ready with strong performance across all metrics."
     elif best_f1 >= 0.70:
+        status_color = ok
         status = "GOOD"
         note = "model performs well. consider tuning hyperparameters or adding features to push above 85%."
     elif best_f1 >= 0.50:
+        status_color = warn
         status = "MODERATE"
         note = "model needs improvement. review feature engineering, class balance, or try different algorithms."
     else:
+        status_color = fail
         status = "POOR"
         note = "model is underperforming. check data quality, feature relevance, and pipeline correctness."
 
-    print(f"\n  STATUS: {status}")
+    print(f"\n  STATUS: {status_color(status)}")
     print(f"  {note}")
 
     if best_gap > 0.10:
-        print(f"  warning: overfitting gap of {best_gap:.2%} suggests the model memorizes training data.")
+        print(f"  {warn('warning:')} overfitting gap of {best_gap:.2%} suggests the model memorizes training data.")
         print(f"  consider: stronger regularization, more data, or simpler model.")
 
     if best_rec < 0.70:
-        print(f"  warning: recall at {best_rec:.2%} means {1-best_rec:.1%} of good loans are being rejected.")
+        print(f"  {warn('warning:')} recall at {best_rec:.2%} means {1-best_rec:.1%} of good loans are being rejected.")
 
 # ── 5. EXPORT ──
 output_dir = Path("outputs/results")
@@ -207,15 +224,15 @@ csv_path = output_dir / f"analysis_{mode}.csv"
 results_df = pd.DataFrame(all_results)
 results_df.to_csv(csv_path, index=False)
 
-print(f"\n  5. EXPORTED")
+print(header("  5. EXPORTED"))
 print(f"  {'─' * 58}")
-print(f"  csv: {csv_path}")
+print(f"  csv: {ok(str(csv_path))}")
 print(f"  rows: {len(results_df)} (all models, all executions)")
 print(f"  use this file to build dashboards or share results.")
 
 # ── 6. INSIGHTS ──
 if data_path.exists():
-    print(f"\n  6. INSIGHTS")
+    print(header("  6. INSIGHTS"))
     print(f"  {'─' * 58}")
 
     # approved vs rejected profile comparison
@@ -253,11 +270,11 @@ if data_path.exists():
     app_defaults = (approved_df["previous_loan_defaults_on_file"] == "Yes").mean()
     rej_defaults = (rejected_df["previous_loan_defaults_on_file"] == "Yes").mean()
     print(f"\n  previous defaults:")
-    print(f"    approved group: {app_defaults:.1%} had previous defaults")
-    print(f"    rejected group: {rej_defaults:.1%} had previous defaults")
+    print(f"    approved group: {ok(f'{app_defaults:.1%}')} had previous defaults")
+    print(f"    rejected group: {fail(f'{rej_defaults:.1%}')} had previous defaults")
 
     # top reasons for rejection (strongest separators)
-    print(f"\n  key rejection drivers:")
+    print(f"\n  {bold('key rejection drivers:')}")
     separators = []
     for col in ["loan_int_rate", "loan_percent_income", "credit_score", "person_income", "person_emp_exp"]:
         avg_app = approved_df[col].mean()
@@ -269,7 +286,7 @@ if data_path.exists():
 
     separators.sort(key=lambda x: x[1], reverse=True)
     for col, pct, direction in separators[:3]:
-        print(f"    - rejected loans have {pct:.0f}% {direction} {col.replace('_', ' ')}")
+        print(f"    - rejected loans have {warn(f'{pct:.0f}%')} {direction} {col.replace('_', ' ')}")
 
 # ── 7. MODEL DECISION FACTORS ──
 # Load best model and extract feature importances
@@ -277,9 +294,9 @@ best_run = runs.sort_values("metrics.f1_score", ascending=False).iloc[0]
 best_run_id = best_run["run_id"]
 best_model_name = best_run.get("tags.mlflow.runName", "?")
 
-print(f"\n  7. WHY DOES THE MODEL APPROVE OR REJECT?")
+print(header("  7. WHY DOES THE MODEL APPROVE OR REJECT?"))
 print(f"  {'─' * 58}")
-print(f"  model: {best_model_name} (run {best_run_id[:12]}...)")
+print(f"  model: {bold(best_model_name)} (run {best_run_id[:12]}...)")
 
 try:
     model = mlflow.sklearn.load_model(f"runs:/{best_run_id}/model")
@@ -313,16 +330,19 @@ try:
         print(f"  {'feature':<36} {'weight':>8} {'impact':>8}")
         print(f"  {'─' * 54}")
 
-        for _, row in imp_df.head(10).iterrows():
+        for rank, (_, row) in enumerate(imp_df.head(10).iterrows()):
             bar = "#" * int(row["importance_pct"] / 2)
-            print(f"  {row['feature']:<36} {row['importance']:>8.4f} {row['importance_pct']:>6.1f}%  {bar}")
+            if rank < 3:
+                print(f"  {ok(f'{row[\"feature\"]:<36}')} {row['importance']:>8.4f} {row['importance_pct']:>6.1f}%  {ok(bar)}")
+            else:
+                print(f"  {row['feature']:<36} {row['importance']:>8.4f} {row['importance_pct']:>6.1f}%  {bar}")
 
         top3 = imp_df.head(3)["feature"].tolist()
-        print(f"\n  top 3 decision factors: {', '.join(top3)}")
+        print(f"\n  top 3 decision factors: {bold(', '.join(top3))}")
 
         # explain each sample decision using top features
         if data_path.exists():
-            print(f"\n  per-sample reasoning (top factors for each decision):")
+            print(f"\n  {bold('per-sample reasoning')} (top factors for each decision):")
             print(f"  {'─' * 58}")
 
             X_samples = pd.concat([sample_approved, sample_rejected])[data_cfg.all_features]
@@ -333,6 +353,7 @@ try:
 
             for i, (idx, row) in enumerate(pd.concat([sample_approved, sample_rejected]).iterrows()):
                 status = "APPROVED" if row["loan_status"] == 1 else "REJECTED"
+                status_colored = ok(status) if status == "APPROVED" else fail(status)
                 transformed_values = X_transformed[i]
 
                 # show original values for the top features
@@ -350,16 +371,15 @@ try:
                         encoded_val = transformed_values[feat_idx]
                         reasons.append(f"{feat_name}={encoded_val:.2f}")
 
-                print(f"\n    [{status}] age={int(row['person_age'])}, income=${row['person_income']:,.0f}, loan=${row['loan_amnt']:,.0f}")
+                print(f"\n    [{status_colored}] age={int(row['person_age'])}, income=${row['person_income']:,.0f}, loan=${row['loan_amnt']:,.0f}")
                 print(f"      factors: {' | '.join(reasons)}")
 
     elif hasattr(clf, "coef_"):
-        print(f"\n  (linear model — uses coefficient weights, not tree importances)")
-        print(f"  this model type does not support per-feature importance ranking.")
+        print(f"\n  {info('(linear model — uses coefficient weights, not tree importances)')}")
     else:
-        print(f"\n  (model type does not expose feature importances)")
+        print(f"\n  {info('(model type does not expose feature importances)')}")
 
 except Exception as e:
-    print(f"  could not load model for analysis: {e}")
+    print(f"  {fail('could not load model for analysis:')} {e}")
 
 print(f"\n{'=' * 64}\n")

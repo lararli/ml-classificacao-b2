@@ -62,8 +62,9 @@ def run_service():
     print(f"  INFERENCE SERVICE")
     print(f"  model: {name}  |  f1: {f1:.4f}")
     print(f"{'='*60}")
-    print(f"\nPaste JSON, or 'quit' to exit.\n")
-    print(json.dumps({"person_age": 30, "person_income": 60000, "person_emp_exp": 5, "loan_amnt": 10000, "loan_int_rate": 8.5, "loan_percent_income": 0.17, "cb_person_cred_hist_length": 5, "credit_score": 700, "person_gender": "female", "person_education": "Bachelor", "person_home_ownership": "RENT", "loan_intent": "PERSONAL", "previous_loan_defaults_on_file": "No"}, indent=2))
+    print(f"\nPaste JSON (inline), or 'quit' to exit.\n")
+    print('example:')
+    print('{"person_age": 29, "person_income": 25018, "person_emp_exp": 7, "loan_amnt": 8069, "loan_int_rate": 12.32, "loan_percent_income": 0.32, "cb_person_cred_hist_length": 10, "credit_score": 650, "person_gender": "male", "person_education": "Associate", "person_home_ownership": "RENT", "loan_intent": "MEDICAL", "previous_loan_defaults_on_file": "No"}')
 
     while True:
         print("\n> ", end="")

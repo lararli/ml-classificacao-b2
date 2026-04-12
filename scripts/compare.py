@@ -3,8 +3,11 @@
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 import mlflow
 import pandas as pd
+from src.colors import ok, fail, warn, bold
 
 mlflow.set_tracking_uri("sqlite:///mlflow.db")
 
@@ -21,7 +24,7 @@ filter_str = f"tags.execution_id = '{execution_id}'" if execution_id else ""
 runs = mlflow.search_runs(experiment_names=[experiment], filter_string=filter_str, order_by=["start_time DESC"])
 
 if runs.empty:
-    print(f"no runs found in {experiment}")
+    print(fail(f"no runs found in {experiment}"))
     sys.exit(1)
 
 runs = runs.drop_duplicates(subset=["tags.mlflow.runName"], keep="first")
@@ -43,7 +46,7 @@ if "metrics.auc_roc" in runs.columns:
 if "tags.execution_id" in runs.columns:
     table["execution_id"] = runs["tags.execution_id"]
 
-print(f"\nEXPERIMENT: {experiment}")
+print(f"\n{bold('EXPERIMENT:')} {experiment}")
 if execution_id:
     print(f"EXECUTION: {execution_id}")
 print(f"MODELS: {len(table)}\n")
@@ -51,11 +54,12 @@ print(f"MODELS: {len(table)}\n")
 print(table.drop(columns=["run_id"]).to_string(index=False))
 
 best = table.iloc[0]
-print(f"\nBEST: {best['model']}  f1={best['f1']}  run_id={best['run_id'][:16]}...")
-print(f"\nnext: make promote MODEL={best['model']}")
+print(f"\n{ok('BEST:')} {bold(best['model'])}  f1={best['f1']}  run_id={best['run_id'][:16]}...")
+model_name = best['model']
+print(f"\nnext: {bold(f'make promote MODEL={model_name}')}")
 
 output_dir = Path("outputs/results")
 output_dir.mkdir(parents=True, exist_ok=True)
 csv_path = output_dir / f"comparison_{experiment.split('_')[-1]}.csv"
 table.to_csv(csv_path, index=False)
-print(f"saved: {csv_path}")
+print(f"{ok('saved:')} {csv_path}")

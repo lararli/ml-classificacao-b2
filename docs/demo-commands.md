@@ -151,72 +151,30 @@ Starts an interactive CLI that loads the production model from MLflow. You paste
 make serve
 ```
 
-### Example Input
+### Examples (paste inline, one per line)
 
-```json
-{
-  "person_age": 30,
-  "person_income": 60000,
-  "person_emp_exp": 5,
-  "loan_amnt": 10000,
-  "loan_int_rate": 8.5,
-  "loan_percent_income": 0.17,
-  "cb_person_cred_hist_length": 5,
-  "credit_score": 700,
-  "person_gender": "female",
-  "person_education": "Bachelor",
-  "person_home_ownership": "RENT",
-  "loan_intent": "PERSONAL",
-  "previous_loan_defaults_on_file": "No"
-}
-```
-
-### Example Output
+**Should be APPROVED:**
 
 ```
-APPROVED (probability: 0.8234)
+{"person_age": 29, "person_income": 25018, "person_emp_exp": 7, "loan_amnt": 8069, "loan_int_rate": 12.32, "loan_percent_income": 0.32, "cb_person_cred_hist_length": 10, "credit_score": 650, "person_gender": "male", "person_education": "Associate", "person_home_ownership": "RENT", "loan_intent": "MEDICAL", "previous_loan_defaults_on_file": "No"}
 ```
 
-### More Examples to Try
-
-**High risk profile (likely rejected):**
-
-```json
-{
-  "person_age": 21,
-  "person_income": 15000,
-  "person_emp_exp": 0,
-  "loan_amnt": 35000,
-  "loan_int_rate": 18.5,
-  "loan_percent_income": 2.33,
-  "cb_person_cred_hist_length": 1,
-  "credit_score": 450,
-  "person_gender": "male",
-  "person_education": "High School",
-  "person_home_ownership": "RENT",
-  "loan_intent": "PERSONAL",
-  "previous_loan_defaults_on_file": "Yes"
-}
+```
+{"person_age": 23, "person_income": 51279, "person_emp_exp": 1, "loan_amnt": 15000, "loan_int_rate": 11.83, "loan_percent_income": 0.29, "cb_person_cred_hist_length": 4, "credit_score": 674, "person_gender": "male", "person_education": "Associate", "person_home_ownership": "RENT", "loan_intent": "VENTURE", "previous_loan_defaults_on_file": "No"}
 ```
 
-**Low risk profile (likely approved):**
+```
+{"person_age": 26, "person_income": 34726, "person_emp_exp": 0, "loan_amnt": 14500, "loan_int_rate": 12.53, "loan_percent_income": 0.42, "cb_person_cred_hist_length": 3, "credit_score": 598, "person_gender": "female", "person_education": "Associate", "person_home_ownership": "RENT", "loan_intent": "PERSONAL", "previous_loan_defaults_on_file": "No"}
+```
 
-```json
-{
-  "person_age": 45,
-  "person_income": 120000,
-  "person_emp_exp": 20,
-  "loan_amnt": 5000,
-  "loan_int_rate": 5.2,
-  "loan_percent_income": 0.04,
-  "cb_person_cred_hist_length": 18,
-  "credit_score": 800,
-  "person_gender": "female",
-  "person_education": "Master",
-  "person_home_ownership": "OWN",
-  "loan_intent": "EDUCATION",
-  "previous_loan_defaults_on_file": "No"
-}
+**Should be REJECTED:**
+
+```
+{"person_age": 32, "person_income": 85190, "person_emp_exp": 10, "loan_amnt": 6000, "loan_int_rate": 8.35, "loan_percent_income": 0.07, "cb_person_cred_hist_length": 7, "credit_score": 679, "person_gender": "male", "person_education": "Bachelor", "person_home_ownership": "MORTGAGE", "loan_intent": "MEDICAL", "previous_loan_defaults_on_file": "Yes"}
+```
+
+```
+{"person_age": 27, "person_income": 90659, "person_emp_exp": 8, "loan_amnt": 18000, "loan_int_rate": 13.57, "loan_percent_income": 0.2, "cb_person_cred_hist_length": 9, "credit_score": 625, "person_gender": "female", "person_education": "Bachelor", "person_home_ownership": "MORTGAGE", "loan_intent": "PERSONAL", "previous_loan_defaults_on_file": "Yes"}
 ```
 
 ---
