@@ -30,10 +30,13 @@ inferencia e monitoramento de drift.
 │   └── custom_models.py        RuleBasedClassifier (exemplo)
 │
 ├── scripts/                    Ferramentas de apoio
+│   ├── analyze.py              Analise completa com KPIs e feature importances
 │   ├── compare.py              Tabela comparativa no terminal + CSV
 │   ├── promote.py              Promove modelo para producao
 │   └── post_deploy.py          Compara run atual vs anterior
 │
+├── docs/
+│   └── demo-commands.md        Guia passo a passo para demo
 │
 ├── archive/                    Projeto anterior preservado
 ├── run_pipeline.py             Orquestrador principal
@@ -50,9 +53,11 @@ inferencia e monitoramento de drift.
 make setup                          # instala dependencias
 make configs                        # valida configuracoes (gate)
 make test                           # treina todos os modelos
-make compare                        # compara resultados
+make compare ENV=test               # compara resultados
+make analyze ENV=test               # analise completa com KPIs
 make promote MODEL=SklearnRF_Optimized  # promove o melhor
 make prod                           # treina em producao
+make analyze ENV=prod               # analise da producao
 make post-deploy                    # verifica estabilidade
 ```
 
@@ -71,9 +76,11 @@ make post-deploy                    # compara com run anterior
 | `make configs` | Valida todas as configs (gate) |
 | `make test` | Pipeline completo em experimentacao (10 modelos) |
 | `make prod` | Pipeline de producao (1 modelo) |
-| `make compare` | Tabela comparativa (experimentacao) |
-| `make compare-prod` | Tabela comparativa (producao) |
+| `make compare ENV=test` | Tabela comparativa (experimentacao) |
+| `make compare ENV=prod` | Tabela comparativa (producao) |
 | `make promote MODEL=nome` | Move modelo para producao |
+| `make analyze ENV=test` | Analise completa experimentacao (KPIs + feature importances) |
+| `make analyze ENV=prod` | Analise completa producao |
 | `make post-deploy` | Compara run atual vs anterior |
 | `make serve` | Inicia servico de inferencia |
 | `make mlflow` | Abre MLflow UI (http://localhost:5000) |

@@ -8,7 +8,13 @@ import pandas as pd
 
 mlflow.set_tracking_uri("sqlite:///mlflow.db")
 
-experiment = sys.argv[1] if len(sys.argv) > 1 else "loan_approval_experimentation"
+ALIASES = {
+    "test": "loan_approval_experimentation",
+    "prod": "loan_approval_production",
+}
+
+arg = sys.argv[1] if len(sys.argv) > 1 else "test"
+experiment = ALIASES.get(arg, arg)
 execution_id = sys.argv[2] if len(sys.argv) > 2 else None
 
 filter_str = f"tags.execution_id = '{execution_id}'" if execution_id else ""
